@@ -169,7 +169,82 @@ app.post("/admin/unbind", requireAdmin, (req, res) => {
 });
 
 /* ---------- Простая веб-панель для генерации ключей ---------- */
-app.use("/panel", express.static(path.join(__dirname, "public")));
+/* HTML зашит прямо в код сервера — не зависит от папки public/
+   и от того, доехала ли она до GitHub/Render. */
+const PANEL_HTML = `<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<title>SatanistVPN — панель ключей</title>
+<style>
+  body { font-family: monospace; background:#111; color:#eee; padding:24px; max-width:720px; margin:0 auto; }
+  h1 { font-size:18px; }
+  input, button, textarea { font-family: inherit; font-size:14px; padding:8px; margin:4px 0; }
+  input[type=text], input[type=password], input[type=number] { width:100%; box-sizing:border-box; background:#222; color:#eee; border:1px solid #444; }
+  button { background:#7a1f1f; color:#fff; border:none; cursor:pointer; }
+  button:hover { background:#a02a2a; }
+  #keys { white-space:pre-wrap; background:#1a1a1a; padding:12px; margin-top:12px; border:1px solid #333; min-height:60px; }
+  .row { margin-bottom:14px; }
+  label { display:block; margin-bottom:4px; opacity:.8; }
+</style>
+</head>
+<body>
+  <h1>Панель генерации ключей — SatanistVPN</h1>
+
+  <div class="row">
+    <label>Admin key (задан в ADMIN_KEY на Render)</label>
+    <input type="password" id="adminKey" placeholder="admin key" />
+  </div>
+
+  <div class="row">
+    <label>Количество ключей</label>
+    <input type="number" id="count" value="1" min="1" max="500" />
+  </div>
+
+  <div class="row">
+    <label>Срок действия (дней, пусто = бессрочно)</label>
+    <input type="number" id="expires" placeholder="напр. 30" />
+  </div>
+
+  <button onclick="generate()">Сгенерировать</button>
+  <button onclick="listKeys()">Показать все ключи</button>
+
+  <div id="keys"></div>
+
+<script>
+async function generate() {
+  const adminKey = document.getElementById('adminKey').value;
+  const count = document.getElementById('count').value;
+  const expiresInDays = document.getElementById('expires').value;
+
+  const res = await fetch('/admin/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
+    body: JSON.stringify({ count, expiresInDays: expiresInDays || undefined })
+  });
+  const data = await res.json();
+  document.getElementById('keys').textContent = data.status
+    ? data.data.keys.join('\\n')
+    : 'Ошибка: ' + data.msg;
+}
+
+async function listKeys() {
+  const adminKey = document.getElementById('adminKey').value;
+  const res = await fetch('/admin/keys', {
+    headers: { 'x-admin-key': adminKey }
+  });
+  const data = await res.json();
+  document.getElementById('keys').textContent = data.status
+    ? JSON.stringify(data.data, null, 2)
+    : 'Ошибка: ' + data.msg;
+}
+</script>
+</body>
+</html>`;
+
+app.get("/panel", (req, res) => {
+  res.type("html").send(PANEL_HTML);
+});
 
 app.get("/", (req, res) => {
   res.send("License server is running. Admin panel: /panel");
